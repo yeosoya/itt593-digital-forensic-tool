@@ -2,7 +2,7 @@ import argparse
 import hashlib
 import pandas as pd
 import socket
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -27,21 +27,49 @@ def hash_evidence(file_path):
     return sha256.hexdigest()
 
 # =========================
-# NETWORK FORENSIC ANALYSIS (WITH TIMELINE)
+# NF-UNSW-NB15 ANALYSIS
+# (Single CSV with simulated forensic fields)
 # =========================
-def analyze_network(csv_file):
+def analyze_nf_unsw(csv_file):
     df = pd.read_csv(csv_file)
 
-    required = {"Timestamp", "Source", "Destination", "Protocol"}
+    required = {
+        "L4_SRC_PORT",
+        "L4_DST_PORT",
+        "PROTOCOL",
+        "FLOW_DURATION_MILLISECONDS",
+        "Attack"
+    }
     if not required.issubset(df.columns):
-        raise ValueError("Network CSV must contain Timestamp, Source, Destination, Protocol")
+        raise ValueError("CSV does not match NF-UNSW-NB15 format")
 
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"], utc=True)
+    # -------------------------
+    # SIMULATED TIMESTAMP
+    # -------------------------
+    base_time = datetime(2026, 1, 20, tzinfo=timezone.utc)
+    df["Timestamp"] = [
+        base_time + timedelta(milliseconds=int(x))
+        for x in df["FLOW_DURATION_MILLISECONDS"].cumsum()
+    ]
 
-    results = []
+    # -------------------------
+    # SIMULATED IP ADDRESSES
+    # -------------------------
+    df["Source"] = df["L4_SRC_PORT"].apply(
+        lambda x: f"192.168.1.{int(x) % 254 + 1}"
+    )
+    df["Destination"] = df["L4_DST_PORT"].apply(
+        lambda x: f"10.0.0.{int(x) % 254 + 1}"
+    )
+    df["Protocol"] = df["PROTOCOL"]
+
+    # =========================
+    # NETWORK FORENSIC FINDINGS
+    # =========================
+    network_results = []
     for src, group in df.groupby("Source"):
         if len(group) >= 3:
-            results.append({
+            network_results.append({
                 "source": src,
                 "destination": group["Destination"].iloc[0],
                 "protocol": group["Protocol"].iloc[0],
@@ -51,41 +79,39 @@ def analyze_network(csv_file):
                 "flag": "High frequency connections in short time window"
             })
 
-    log_event("Network traffic analyzed with timeline")
-    return results
+    # =========================
+    # AUTH / FAILED LOGIN (SIMULATED)
+    # =========================
+    failed = df[df["Attack"] != "Benign"]
+    auth_results = []
 
-# =========================
-# AUTH LOG ANALYSIS (WITH TIMELINE)
-# =========================
-def analyze_logs(csv_file):
-    df = pd.read_csv(csv_file)
-
-    required = {"Timestamp", "IP", "Status"}
-    if not required.issubset(df.columns):
-        raise ValueError("Auth log CSV must contain Timestamp, IP, Status")
-
-    df["Timestamp"] = pd.to_datetime(df["Timestamp"], utc=True)
-    failed = df[df["Status"] == "FAIL"]
-
-    results = []
-    for ip, group in failed.groupby("IP"):
-        results.append({
+    for ip, group in failed.groupby("Source"):
+        auth_results.append({
             "ip": ip,
             "attempts": len(group),
             "first_attempt": group["Timestamp"].min(),
             "last_attempt": group["Timestamp"].max(),
-            "duration": int((group["Timestamp"].max() - group["Timestamp"].min()).total_seconds() / 60)
+            "duration": int(
+                (group["Timestamp"].max() - group["Timestamp"].min())
+                .total_seconds() / 60
+            )
         })
 
-    log_event("Authentication logs analyzed with timeline")
-    return results
+    log_event("NF-UNSW-NB15 dataset analyzed with simulated timeline")
+    return network_results, auth_results
 
 # =========================
-# HTML REPORT (UPDATED CSS ONLY)
+# HTML REPORT
 # =========================
 def generate_html_report(data):
     os.makedirs("reports", exist_ok=True)
     path = f"reports/forensic_report_{data['case_id']}.html"
+
+    integrity = (
+        "MATCHED"
+        if data["hash_before"] == data["hash_after"]
+        else "NOT MATCHED"
+    )
 
     html = f"""
 <!DOCTYPE html>
@@ -95,57 +121,46 @@ def generate_html_report(data):
 <style>
 body {{
     font-family: Arial, Helvetica, sans-serif;
-    background-color: #f7f9fc;
-    margin: 40px;
-    color: #2c3e50;
+    margin: 30px;
+    color: #000;
 }}
 
-h1 {{
-    text-align: center;
-    margin-bottom: 5px;
-}}
-
-h2 {{
-    margin-bottom: 10px;
-}}
+h1 {{ text-align: center; }}
 
 .section {{
-    background-color: #ffffff;
+    border: 1px solid #000;
     padding: 15px;
-    margin-bottom: 25px;
-    border: 1px solid #ccc;
+    margin-bottom: 20px;
 }}
 
 table {{
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10px;
+    table-layout: fixed;
+    word-wrap: break-word;
+}}
+
+th, td {{
+    border: 1px solid #000;
+    padding: 6px;
+    font-size: 12px;
+    text-align: center;
+    vertical-align: top;
 }}
 
 th {{
     background-color: #f2f2f2;
-    color: #000;
-    border: 1px solid #000;
-    padding: 8px;
-}}
-
-td {{
-    border: 1px solid #000;
-    padding: 8px;
-    text-align: center;
 }}
 
 pre {{
-    background-color: #f4f6f7;
-    padding: 10px;
-    font-size: 12px;
+    font-size: 11px;
+    white-space: pre-wrap;
 }}
 
-.footer {{
-    text-align: center;
-    font-size: 12px;
-    color: #7b7d7d;
-    margin-top: 30px;
+@media print {{
+    table {{
+        font-size: 10px;
+    }}
 }}
 </style>
 </head>
@@ -153,7 +168,6 @@ pre {{
 <body>
 
 <h1>Automated Digital Forensic Analysis Report</h1>
-<p style="text-align:center;">Generated by <b>PySecureTrace</b></p>
 
 <div class="section">
 <h2>1. Header & Metadata</h2>
@@ -169,7 +183,7 @@ pre {{
 <h2>2. Evidence Integrity</h2>
 <p><b>Ingress Hash (SHA-256):</b> {data['hash_before']}</p>
 <p><b>Egress Hash (SHA-256):</b> {data['hash_after']}</p>
-<p><b>Integrity Status:</b> MATCHED</p>
+<p><b>Integrity Status:</b> {integrity}</p>
 </div>
 
 <div class="section">
@@ -188,9 +202,9 @@ pre {{
 <th>Destination</th>
 <th>Protocol</th>
 <th>Frequency</th>
-<th>First Seen (UTC)</th>
-<th>Last Seen (UTC)</th>
-<th>Flag Reason</th>
+<th>First Seen</th>
+<th>Last Seen</th>
+<th>Flag</th>
 </tr>
 """
 
@@ -260,10 +274,6 @@ indicates suspicious activity. Evidence integrity was preserved throughout the f
 </p>
 </div>
 
-<div class="footer">
-PySecureTrace | ITT593 Digital Forensics Project
-</div>
-
 </body>
 </html>
 """
@@ -276,17 +286,12 @@ PySecureTrace | ITT593 Digital Forensics Project
 # =========================
 # CORE WORKFLOW
 # =========================
-def run_forensics(net_file, log_file, case_id, examiner):
+def run_forensics(csv_file, case_id, examiner):
     log_event("Forensic process started")
 
-    hash_before = hash_evidence(net_file)
-    log_event("Ingress hash calculated")
-
-    network = analyze_network(net_file)
-    logs = analyze_logs(log_file)
-
-    hash_after = hash_evidence(net_file)
-    log_event("Egress hash calculated")
+    hash_before = hash_evidence(csv_file)
+    network, logs = analyze_nf_unsw(csv_file)
+    hash_after = hash_evidence(csv_file)
 
     report = generate_html_report({
         "time": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
@@ -299,52 +304,42 @@ def run_forensics(net_file, log_file, case_id, examiner):
         "logs": logs
     })
 
-    log_event("HTML report generated")
     print(f"[✓] Report generated: {report}")
 
 # =========================
-# GUI
+# GUI (BIGGER WINDOW)
 # =========================
 def gui_mode():
-    def browse(entry):
+    def browse():
         entry.delete(0, tk.END)
         entry.insert(0, filedialog.askopenfilename())
 
     def start():
         try:
-            run_forensics(
-                net_entry.get(),
-                log_entry.get(),
-                case_entry.get(),
-                examiner_entry.get()
-            )
+            run_forensics(entry.get(), case_entry.get(), examiner_entry.get())
             messagebox.showinfo("Success", "Report generated successfully!")
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
     root = tk.Tk()
     root.title("PySecureTrace – Digital Forensic Tool")
+    root.geometry("600x300")
+    root.resizable(True, True)
 
-    tk.Label(root, text="PySecureTrace – Digital Forensic Tool",
-             font=("Arial", 14, "bold")).grid(row=0, column=0, columnspan=3, pady=10)
+    tk.Label(root, text="Case ID").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+    tk.Label(root, text="Examiner").grid(row=1, column=0, padx=10, pady=10, sticky="w")
+    tk.Label(root, text="NF-UNSW-NB15 CSV").grid(row=2, column=0, padx=10, pady=10, sticky="w")
 
-    labels = ["Case ID", "Examiner", "Network CSV", "Auth Log CSV"]
-    for i, l in enumerate(labels, start=1):
-        tk.Label(root, text=l).grid(row=i, column=0, sticky="w")
+    case_entry = tk.Entry(root, width=50)
+    examiner_entry = tk.Entry(root, width=50)
+    entry = tk.Entry(root, width=50)
 
-    case_entry = tk.Entry(root, width=40)
-    examiner_entry = tk.Entry(root, width=40)
-    net_entry = tk.Entry(root, width=40)
-    log_entry = tk.Entry(root, width=40)
+    case_entry.grid(row=0, column=1, padx=10)
+    examiner_entry.grid(row=1, column=1, padx=10)
+    entry.grid(row=2, column=1, padx=10)
 
-    case_entry.grid(row=1, column=1)
-    examiner_entry.grid(row=2, column=1)
-    net_entry.grid(row=3, column=1)
-    log_entry.grid(row=4, column=1)
-
-    tk.Button(root, text="Browse", command=lambda: browse(net_entry)).grid(row=3, column=2)
-    tk.Button(root, text="Browse", command=lambda: browse(log_entry)).grid(row=4, column=2)
-    tk.Button(root, text="Run Analysis", command=start).grid(row=5, column=1, pady=10)
+    tk.Button(root, text="Browse", command=browse).grid(row=2, column=2, padx=10)
+    tk.Button(root, text="Run Analysis", command=start).grid(row=3, column=1, pady=20)
 
     root.mainloop()
 
@@ -359,9 +354,4 @@ if __name__ == "__main__":
     if args.gui:
         gui_mode()
     else:
-        run_forensics(
-            "network_data.csv",
-            "auth_logs.csv",
-            "CASE-001",
-            "Default Examiner"
-        )
+        run_forensics("NF-UNSW-NB15.csv", "CASE-001", "Default Examiner")

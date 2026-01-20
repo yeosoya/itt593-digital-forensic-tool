@@ -1,0 +1,98 @@
+
+<html>
+<head>
+<title>Automated Forensic Report</title>
+<style>
+body { font-family: Arial; margin: 40px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { border: 1px solid #ccc; padding: 8px; }
+th { background: #f2f2f2; }
+pre { background: #eee; padding: 10px; }
+</style>
+</head>
+<body>
+
+<h1>Automated Forensic Analysis Report</h1>
+
+<h2>1. Header & Metadata</h2>
+<ul>
+<li><b>Tool:</b> PySecureTrace v1.1</li>
+<li><b>Date (UTC):</b> 2026-01-20 14:34:25 UTC</li>
+<li><b>Case ID:</b> 007</li>
+<li><b>Examiner:</b> hanisa</li>
+<li><b>System Hostname:</b> LAPTOP-7CBH53G7</li>
+</ul>
+
+<h2>2. Evidence Integrity</h2>
+<p><b>Ingress Hash:</b> 6875a68f81194fbde7acd7654963771c8e5852531c5f4540604bd092d13ae6f3</p>
+<p><b>Egress Hash:</b> 6875a68f81194fbde7acd7654963771c8e5852531c5f4540604bd092d13ae6f3</p>
+<p><b>Status:</b> MATCHED</p>
+
+<h2>3. Executive Summary</h2>
+<ul>
+<li>1 suspicious network sources detected</li>
+<li>1 IPs involved in failed authentication attempts</li>
+</ul>
+
+<h2>4. Detailed Network Findings (Timeline-Based)</h2>
+<table>
+<tr>
+<th>Source IP</th>
+<th>Destination</th>
+<th>Protocol</th>
+<th>Frequency</th>
+<th>First Seen (UTC)</th>
+<th>Last Seen (UTC)</th>
+<th>Flag Reason</th>
+</tr>
+
+<tr>
+<td>192.168.1.10</td>
+<td>192.168.1.1</td>
+<td>TCP</td>
+<td>6</td>
+<td>2026-01-20 00:58:01+00:00</td>
+<td>2026-01-20 00:58:20+00:00</td>
+<td>High frequency connections within short time window</td>
+</tr>
+
+</table>
+
+<h2>5. Failed Login Analysis (Timeline)</h2>
+<table>
+<tr>
+<th>IP Address</th>
+<th>Attempts</th>
+<th>First Attempt</th>
+<th>Last Attempt</th>
+<th>Duration (minutes)</th>
+<th>Assessment</th>
+</tr>
+
+<tr>
+<td>192.168.1.10</td>
+<td>3</td>
+<td>2026-01-20 01:09:55+00:00</td>
+<td>2026-01-20 01:10:05+00:00</td>
+<td>0</td>
+<td>Possible brute-force activity</td>
+</tr>
+
+</table>
+
+<h2>6. Audit Trail</h2>
+<pre>
+[2026-01-20 14:34:25 UTC] INFO: Forensic process started
+[2026-01-20 14:34:25 UTC] INFO: Ingress hash calculated
+[2026-01-20 14:34:25 UTC] INFO: Network traffic analyzed with timeline
+[2026-01-20 14:34:25 UTC] INFO: Authentication logs analyzed with timeline
+[2026-01-20 14:34:25 UTC] INFO: Egress hash calculated
+
+</pre>
+
+<h2>7. Conclusion</h2>
+<p>Timeline correlation between network traffic and authentication failures indicates suspicious activity.
+Evidence integrity was preserved throughout the forensic process.</p>
+
+</body>
+</html>
